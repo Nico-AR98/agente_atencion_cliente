@@ -1,7 +1,13 @@
+from negocio.customer_api import (
+    buscar_cliente_por_email,
+    crear_reintegro,
+    resetear_contrasena
+)
+
 
 COSTO_DIARIO = 2160
 
-def calcular_reintegro(dias_sin_servicio: int, indice_malestar: float) -> dict:
+async def calcular_reintegro(email:str, dias_sin_servicio: int, indice_malestar: float) -> dict:
     """Calcula el reintegro que le corresponde a un cliente por días sin servicio.
 
     El monto es: días sin servicio * costo diario del servicio * índice de
@@ -20,10 +26,18 @@ def calcular_reintegro(dias_sin_servicio: int, indice_malestar: float) -> dict:
     if dias_sin_servicio <= 0:
         raise ValueError("Los días sin servicio deben ser un número positivo.")
 
+    cliente = await buscar_cliente_por_email(email)
+
+    if cliente is None:
+        return {"error": f"No se encontró ningún cliente con el correo {email}."}
+    
     # Acotamos el índice al rango válido para evitar reintegros desmedidos.
     indice = min(max(float(indice_malestar), 1.0), 2.0)
 
     monto = dias_sin_servicio * COSTO_DIARIO * indice
+    reembolso = await crear_reintegro(
+        cliente["id"], monto, f"{dias_sin_servicio} dia(s) sin servicio"
+    )
 
     print(
         f"[herramienta] calcular_reintegro -> {dias_sin_servicio} día(s) x "
@@ -35,10 +49,11 @@ def calcular_reintegro(dias_sin_servicio: int, indice_malestar: float) -> dict:
         "costo_diario": COSTO_DIARIO,
         "indice_malestar": indice,
         "monto_reintegro": round(monto, 2),
+        "reembolso": reembolso
     }
 
 
-def recuperar_contrasena(email: str) -> dict:
+async def recuperar_contrasena(email: str) -> dict:
     """Inicia el recupero de contraseña enviando un mail a la casilla del cliente.
 
     Args:
@@ -51,9 +66,16 @@ def recuperar_contrasena(email: str) -> dict:
     if "@" not in email:
         raise ValueError("El correo electrónico no es válido.")
 
+    cliente = await buscar_cliente_por_email(email)
+
+    if cliente is None:
+        return {"error": f"No se encontró ningún cliente con el correo {email}."}
+
+    resultado = await resetear_contrasena(cliente["id"])
+
     print(
         f"[herramienta] recuperar_contrasena -> Se ha enviado un mail a la "
         f"casilla {email} con las instrucciones para restablecer la contraseña."
     )
 
-    return {"email": email, "estado": "mail de recuperación enviado"}
+    return {"email": email, "estado": "mail de recuperación enviado", **resultado}

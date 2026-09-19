@@ -69,24 +69,24 @@ def crear_gemini_chat(system_role, tools, temperature=0.3, max_output_tokens=102
 
     gemini_client = get_gemini_client(gemini_config)
 
-    return gemini_client.chats.create(
+    return gemini_client.aio.chats.create(
         model=gemini_config["model"],
         config=build_generate_content_config(system_role, tools, temperature=temperature, max_output_tokens=max_output_tokens),
     )
 
 
-def get_gemini_response(system_role, prompt, gemini_config=None, temperature=0.3, max_output_tokens=1024, tools=None, chat=None):   
+async def get_gemini_response(system_role, prompt, gemini_config=None, temperature=0.3, max_output_tokens=1024, tools=None, chat=None):   
 
     try:
         if chat is not None:
-            response = chat.send_message(prompt.strip())
+            response = await chat.send_message(prompt.strip())
         else:
             if gemini_config is None:
                 gemini_config = get_gemini_config()
 
             gemini_client = get_gemini_client(gemini_config)
 
-            response = gemini_client.generate_content(
+            response = await gemini_client.aio.models.generate_content(
                 model=gemini_config["model"],
                 config=build_generate_content_config(system_role, tools, temperature=temperature, max_output_tokens=max_output_tokens),
                 contents=prompt.strip()

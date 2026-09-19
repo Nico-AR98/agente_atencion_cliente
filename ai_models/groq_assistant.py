@@ -1,6 +1,7 @@
-import os
+import os, asyncio
 from dotenv import load_dotenv
-from groq import Groq
+from groq import AsyncGroq
+from utils import build_messages
 
 load_dotenv()
 
@@ -31,33 +32,12 @@ def get_groq_client(groq_config=None):
     if _groq_client is None:
         if groq_config is None:
             groq_config = get_groq_config()
-        _groq_client = Groq(api_key=groq_config["api_key"])
+        _groq_client = AsyncGroq(api_key=groq_config["api_key"])
 
     return _groq_client
 
 
-def build_messages(system_role, prompt, history=None):
-    """Construye la lista de mensajes para enviar a Groq.
-
-    Args:
-        system_role (str): Instrucciones del rol del sistema.
-        prompt (str): Mensaje del usuario.
-        history (list, optional): Historial de mensajes previos. Defaults to None.
-
-    Returns:
-        list: Lista de mensajes en el formato esperado por Groq.
-    """
-    messages = []
-    if system_role:
-        messages.append({"role": "system", "content": system_role})
-
-    if history:
-        messages.extend(history)
-
-    messages.append({"role": "user", "content": prompt})
-    return messages
-
-def get_groq_response(system_role, prompt, groq_config=None, temperature=0.3, max_tokens=1024, history=None):
+async def get_groq_response(system_role, prompt, groq_config=None, temperature=0.3, max_tokens=1024, history=None):
 
     if not prompt.strip():
         raise ValueError("El mensaje no puede estar vacío")
@@ -68,7 +48,7 @@ def get_groq_response(system_role, prompt, groq_config=None, temperature=0.3, ma
     groq_client = get_groq_client(groq_config)
 
     try:
-        response = groq_client.chat.completions.create(
+        response = await groq_client.chat.completions.create(
             model=groq_config["model"],
             messages=build_messages(system_role, prompt, history),
             temperature=temperature,
@@ -79,12 +59,12 @@ def get_groq_response(system_role, prompt, groq_config=None, temperature=0.3, ma
         return f"Error al obtener la respuesta de Groq: {e}"
 
 
-def main():
+async def main():
     system_role = "Eres un asistente de atención al cliente que ayuda a los usuarios con sus reclamos."
     prompt = "Hola, tengo un problema con mi servicio y quiero un reintegro."
-    response = get_groq_response(system_role, prompt)
+    response = await get_groq_response(system_role, prompt)
     print(f"Groq: {response}")
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

@@ -1,6 +1,7 @@
-import os
+import os, asyncio
 from dotenv import load_dotenv
-from huggingface_hub import InferenceClient
+from huggingface_hub import AsyncInferenceClient
+from utils import build_messages
 
 load_dotenv()  # Cargamos las variables de entorno desde el archivo .env
 
@@ -31,34 +32,12 @@ def get_hf_client(hf_config=None):
     if _hf_client is None:
         if hf_config is None:
             hf_config = get_hf_config()
-        _hf_client = InferenceClient(token=hf_config["api_key"])
+        _hf_client = AsyncInferenceClient(token=hf_config["api_key"])
 
     return _hf_client
 
 
-def build_messages(system_role, prompt, history=None):
-    """Construye la lista de mensajes para enviar a Groq.
-
-    Args:
-        system_role (str): Instrucciones del rol del sistema.
-        prompt (str): Mensaje del usuario.
-        history (list, optional): Historial de mensajes previos. Defaults to None.
-
-    Returns:
-        list: Lista de mensajes en el formato esperado por Groq.
-    """
-    messages = []
-    if system_role:
-        messages.append({"role": "system", "content": system_role})
-
-    if history:
-        messages.extend(history)
-
-    messages.append({"role": "user", "content": prompt})
-    return messages
-
-
-def get_hf_response(system_role, prompt, hf_config=None, temperature=0.3, max_tokens=1024, history=None):
+async def get_hf_response(system_role, prompt, hf_config=None, temperature=0.3, max_tokens=1024, history=None):
     """Obtiene la respuesta de Hugging Face para un mensaje dado.
 
     Args:
@@ -81,7 +60,7 @@ def get_hf_response(system_role, prompt, hf_config=None, temperature=0.3, max_to
     client = get_hf_client(hf_config)
 
     try:
-        chat_completion = client.chat_completion(
+        chat_completion = await client.chat_completion(
             model=hf_config["model"],
             messages=build_messages(system_role, prompt, history),
             temperature=temperature,
@@ -92,12 +71,12 @@ def get_hf_response(system_role, prompt, hf_config=None, temperature=0.3, max_to
         return f"Error al obtener la respuesta de Hugging Face: {e}"
 
 
-def main():
+async def main():
     system_role = "Eres un asistente de atención al cliente que ayuda a los usuarios con sus reclamos."
     prompt = "Hola, tengo un problema con mi servicio y quiero un reintegro."
-    response = get_hf_response(system_role, prompt)
+    response = await get_hf_response(system_role, prompt)
     print(f"Hugging Face: {response}")
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

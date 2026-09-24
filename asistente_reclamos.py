@@ -14,13 +14,13 @@ Variables de entorno (archivo .env):
     ASSISTANT_NAME    nombre del asistente (opcional).
 """
 
-import os
+import os, asyncio
 
 from dotenv import load_dotenv
-from ai_models.gemini_assistant import get_gemini_response, crear_gemini_chat
+from ai_models.llm_router import crear_chat
 from negocio.utils import calcular_reintegro, recuperar_contrasena
 from speech.sp_recognition import speech_to_text
-from speech.voice_generation import generate_voice
+from speech.voice_generation_gtts import generate_voice
 
 
 load_dotenv()  # Cargamos las variables de entorno desde el archivo .env
@@ -28,6 +28,8 @@ load_dotenv()  # Cargamos las variables de entorno desde el archivo .env
 
 # Palabras con las que el usuario puede terminar la conversación.
 SALIDAS = {"salir", "exit", "quit", "chau"}
+
+PALABRAS_CLAVE_EMAIL = ("email", "correo electronico", "correo electrónico", "e-mail")
 
 # Rol del sistema: define el comportamiento del agente y cómo debe estimar el
 # índice de malestar a partir de la forma en que se expresa el cliente.
@@ -47,14 +49,21 @@ Tenés dos herramientas disponibles y debés usarlas según lo que pida el clien
      1.6 = claramente enojado, insiste o reclama con firmeza;
      2.0 = muy enojado: mayúsculas, insultos, amenaza con dar de baja el
      servicio o con hacer un reclamo formal.
+    - email:  correo electrónico del cliente, para identificarlo y registrar el
+     reintegro en el sistema. Si no lo dio, pedíselo antes de usar la
+     herramienta.
 
 2. recuperar_contrasena: usala cuando el cliente no pueda entrar a su cuenta,
    haya olvidado la contraseña o pida restablecerla. Necesitás su correo
-   electrónico; si no lo dio, pedíselo antes de usar la herramienta.
+   electrónico; si no lo dio, pedíselo antes de usar la herramienta. La
+   herramienta devuelve un enlace de recuperación (reset_link) que debés
+   compartirle al cliente.
 
 Después de usar una herramienta, explicale al cliente el resultado en lenguaje
 natural. Si el mensaje no corresponde a ninguna de las dos herramientas,
 respondé normalmente como representante de atención al cliente.
+
+Evita incluir "*" en tu respuesta o cualquier caracter especial. Ten en cuenta que todos los valores de las facturas y reintegros por dias sin servicio estan expresados en pesos.
 """
 
 
@@ -79,29 +88,55 @@ HERRAMIENTAS = [calcular_reintegro, recuperar_contrasena]
 
 
 
-def atender_reclamo(chat, mensaje):
-   return get_gemini_response(system_role=SYSTEM_ROLE, prompt=mensaje, chat=chat)
+async def atender_reclamo(chat, mensaje):
+   return await chat.enviar_mensaje(mensaje)
 
 
 def get_user_input():
     """Solicita un mensaje al usuario."""
     return input("Cliente: ")
 
+def elegir_modo():
+    while True:
+        modo = input("¿Cómo preferis interactuar? Por voz o por texto (voz/texto)").strip().lower()
+        if modo in ("voz", "texto"):
+            return modo
+        print("Opcion es inválida, respondé 'voz' o 'texto'")
 
-def main():
+def requiere_email(respuesta:str) -> bool:
+    respuesta_normalizada = respuesta.lower()
+    return any(palabra in respuesta_normalizada for palabra in PALABRAS_CLAVE_EMAIL)
+
+def obtener_mensaje_usuario(modo, forzar_texto):
+    if modo == "voz" and not forzar_texto:
+            return (speech_to_text() or "").strip()
+
+    if forzar_texto and modo == "voz":
+        print("Escribi tu correo electrónico, no lo dictes por voz")
+
+    return input("Cliente: ").strip()
+
+    
+async def main():
     assistant_name = os.getenv("ASSISTANT_NAME", "Atención al Cliente")
-    chat = crear_gemini_chat(system_role=SYSTEM_ROLE, tools=HERRAMIENTAS, temperature=0.3, max_output_tokens=1024)
+    chat = crear_chat(system_role=SYSTEM_ROLE, tools=HERRAMIENTAS, temperature=0.3, max_output_tokens=1024)
+
+    modo = elegir_modo()
 
     #print(f"{assistant_name}: ¡Hola! ¿En qué puedo ayudarte hoy?")
     mensaje_inicial = "¡Hola! ¿En qué puedo ayudarte hoy?"
     print(f"{assistant_name}: {mensaje_inicial}")
     print("(escribí 'salir' para terminar)\n")
 
-    generate_voice(mensaje_inicial)
+    if modo == "voz":
+        generate_voice(mensaje_inicial)
+
+
+    esperando_email = False
 
     while True:
         try:
-            mensaje = (speech_to_text() or "").strip()
+            mensaje = obtener_mensaje_usuario(modo, esperando_email)
 
             if not mensaje:
                 # No se reconocio nada: volvemos a escuchar.
@@ -110,9 +145,13 @@ def main():
             if mensaje.lower() in SALIDAS:
                 break
 
-            respuesta = atender_reclamo(chat, mensaje)
+            respuesta = await atender_reclamo(chat, mensaje)
             print(f"{assistant_name}: {respuesta}\n")
-            generate_voice(respuesta)
+
+            if modo == "voz":
+                generate_voice(respuesta)
+
+            esperando_email = requiere_email(respuesta)
 
         except (KeyboardInterrupt, EOFError):
             print(f"\n{assistant_name}: sesión finalizada.")
@@ -125,4 +164,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

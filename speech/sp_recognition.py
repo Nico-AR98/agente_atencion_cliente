@@ -1,36 +1,57 @@
+import os
 import sys
-
-# PyAudio no tiene wheels para Python 3.14 (compilarlo pide Visual C++).
-# PyAudioWPatch es un fork con binarios listos: lo registramos como "pyaudio"
-# para que speech_recognition lo encuentre.
-try:
-    import pyaudio  # noqa: F401
-except ImportError:
-    import pyaudiowpatch
-
-    sys.modules["pyaudio"] = pyaudiowpatch
-
+import contextlib
 import speech_recognition as sr
+
+# --- FUNCIÓN PARA SILENCIAR ERRORES DE ALSA/JACK ---
+@contextlib.contextmanager
+def ignore_stderr():
+    """Redirige los errores de la terminal (stderr) al vacío."""
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    old_stderr = os.dup(sys.stderr.fileno())
+    sys.stderr.flush()
+    try:
+        os.dup2(devnull, sys.stderr.fileno())
+        yield
+    finally:
+        sys.stderr.flush()
+        os.dup2(old_stderr, sys.stderr.fileno())
+        os.close(old_stderr)
+        os.close(devnull)
 
 def speech_to_text():
     r = sr.Recognizer()
-
-    with sr.Microphone() as source:
-        print("Ajustando el ruido ambiental...")
-        r.adjust_for_ambient_noise(source)
-        print("Listo! Podes hablar ahora.")
-
-        r.pause_threshold = 2
-
-        audio = r.listen(source)
+    
+    # Configuraciones para mejorar la detección:
+    r.dynamic_energy_threshold = True
+    r.pause_threshold = 0.8  # Menos tiempo de espera para que sea más ágil
+    
+    # Usamos el silenciador solo durante la apertura del micrófono
+    with ignore_stderr():
+        try:
+            with sr.Microphone() as source:
+                print("Ajustando el ruido ambiental...")
+                r.adjust_for_ambient_noise(source, duration=1)
+                
+                print("¡Listo! Podés hablar ahora...")
+                # timeout: tiempo máximo esperando a que empiece a hablar
+                # phrase_time_limit: tiempo máximo de la frase
+                audio = r.listen(source, timeout=10, phrase_time_limit=20)
+        except Exception as e:
+            print(f"Error al acceder al micrófono: {e}")
+            return ""
 
     try:
-        texto = r.recognize_google(audio, language="es-ES")
+        # Usamos Google con el idioma configurado para español de Argentina (u otro)
+        texto = r.recognize_google(audio, language="es-AR")
         print(f"Texto reconocido: {texto}")
         return texto
-
+    except sr.UnknownValueError:
+        print("No se pudo entender el audio.")
+        return ""
+    except sr.RequestError as e:
+        print(f"Error de conexión con el servicio de Google: {e}")
+        return ""
     except Exception as e:
-        # Si no se entendio el audio devolvemos "" para que quien llame
-        # pueda seguir trabajando con un texto (nunca con None).
-        print(f"Ha ocurrido un error: {e}")
+        print(f"Error inesperado: {e}")
         return ""

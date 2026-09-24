@@ -1,7 +1,7 @@
 import os, asyncio
 from dotenv import load_dotenv
 from huggingface_hub import AsyncInferenceClient
-from utils import build_messages
+from ai_models.utils import build_messages
 
 load_dotenv()  # Cargamos las variables de entorno desde el archivo .env
 

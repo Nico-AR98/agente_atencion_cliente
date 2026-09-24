@@ -2,10 +2,10 @@ import json, os
 
 from dotenv import load_dotenv
 
-from gemini_assistant import crear_gemini_chat, get_gemini_response
-from groq_assistant import get_groq_client, get_groq_config
-from hf_assistant import get_hf_response
-from ollama_assistant import get_ollama_client, get_ollama_config
+from ai_models.gemini_assistant import crear_gemini_chat, get_gemini_response
+from ai_models.groq_assistant import get_groq_client, get_groq_config
+from ai_models.hf_assistant import get_hf_response
+from ai_models.ollama_assistant import get_ollama_client, get_ollama_config
 
 load_dotenv()
 
@@ -29,7 +29,7 @@ def get_llm_provider():
 async def _ejecutar_herramienta(tools_por_nombre, nombre, argumentos):
     funcion = tools_por_nombre.get(nombre)
 
-    if funcion in None:
+    if funcion is None:
         return {"error": f"La herramienta '{nombre}' no existe."}
 
     try:

@@ -1,7 +1,7 @@
 import os, asyncio
 from dotenv import load_dotenv
 from groq import AsyncGroq
-from utils import build_messages
+from ai_models.utils import build_messages
 
 load_dotenv()
 

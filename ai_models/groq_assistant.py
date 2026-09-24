@@ -56,7 +56,7 @@ async def get_groq_response(system_role, prompt, groq_config=None, temperature=0
         )
         return response.choices[0].message.content
     except Exception as e:
-        return f"Error al obtener la respuesta de Groq: {e}"
+        raise RuntimeError(f"Error al obtener la respuesta de Groq: {e}") from e
 
 
 async def main():

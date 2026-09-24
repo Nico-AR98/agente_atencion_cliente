@@ -94,5 +94,5 @@ async def get_gemini_response(system_role, prompt, gemini_config=None, temperatu
 
         return response.text
     except Exception as e:
-        return f"Error al obtener la respuesta de Gemini: {e}"
+        raise RuntimeError(f"Error al obtener la respuesta de Gemini: {e}") from e
 

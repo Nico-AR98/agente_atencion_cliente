@@ -68,7 +68,7 @@ async def get_hf_response(system_role, prompt, hf_config=None, temperature=0.3, 
         )
         return chat_completion.choices[0].message.content
     except Exception as e:
-        return f"Error al obtener la respuesta de Hugging Face: {e}"
+        raise RuntimeError(f"Error al obtener la respuesta de Hugging Face: {e}") from e
 
 
 async def main():

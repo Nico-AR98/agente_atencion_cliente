@@ -55,3 +55,19 @@ def speech_to_text():
     except Exception as e:
         print(f"Error inesperado: {e}")
         return ""
+
+
+def transcribir_audio(audio_wav) -> str:
+    """Transcribe un audio WAV (bytes o archivo) grabado desde el navegador."""
+    r = sr.Recognizer()
+    if isinstance(audio_wav, bytes):
+        import io
+        audio_wav = io.BytesIO(audio_wav)
+
+    with sr.AudioFile(audio_wav) as source:
+        audio = r.record(source)
+
+    try:
+        return r.recognize_google(audio, language="es-AR")
+    except sr.UnknownValueError:
+        return ""

@@ -4,7 +4,8 @@ from dotenv import load_dotenv
 
 from ai_models.llm_router import crear_chat
 from negocio.utils import calcular_reintegro, recuperar_contrasena
-#from speech.voice_generation import generate_voice
+from speech.sp_recognition import transcribir_audio
+from speech.voice_generation_gtts import generar_audio
 
 load_dotenv()
 
@@ -44,7 +45,6 @@ Evita incluir "*" en tu respuesta o cualquier caracter especial. Ten en cuenta q
 HERRAMIENTAS = [calcular_reintegro, recuperar_contrasena]
 
 ASSISTANT_NAME = os.getenv("ASSISTANT_NAME", "Alexia")
-
 def run_async(coro):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -62,6 +62,7 @@ st.title(f"👩 {ASSISTANT_NAME}")
 # --- Sidebar para opciones
 with st.sidebar:
     st.header("Acciones")
+    responder_con_voz = st.toggle("Responder con voz", value=True)
     if st.button("Limpiar chat"):
         st.session_state.messages = []
         st.session_state.chat_session = None
@@ -83,11 +84,29 @@ if "messages" not in st.session_state:
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
+        if message.get("audio"):
+            st.audio(message["audio"], format="audio/mp3")
 
 
 #Entrada del usuario:
 
-if prompt := st.chat_input("Escribe tu consulta aqui"):
+entrada = st.chat_input("Escribe tu consulta o graba un audio", accept_audio=True)
+
+prompt = None
+if entrada:
+    prompt = entrada.text
+    # Si el usuario grabó un audio, lo transcribimos a texto
+    if entrada.audio:
+        with st.spinner("Transcribiendo audio ..."):
+            try:
+                prompt = transcribir_audio(entrada.audio.getvalue())
+            except Exception as e:
+                st.error(f"Error al transcribir el audio: {e}")
+                prompt = None
+        if entrada.audio and not prompt:
+            st.warning("No se pudo entender el audio, proba de nuevo.")
+
+if prompt:
     # 1: Mostrar mensaje del usuario
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
@@ -100,8 +119,19 @@ if prompt := st.chat_input("Escribe tu consulta aqui"):
         with st.spinner("Procesando ..."):
             try:
                 respuesta = run_async(st.session_state.chat_session.enviar_mensaje(prompt))
+
+                # Si el LLM falla lanza una excepción, así que no se genera audio
+                if not respuesta:
+                    raise RuntimeError("El modelo no devolvió ninguna respuesta.")
+
                 st.markdown(respuesta)
-                st.session_state.messages.append({"role":"assistant", "content":respuesta})
+
+                audio_respuesta = None
+                if responder_con_voz:
+                    audio_respuesta = generar_audio(respuesta)
+                    st.audio(audio_respuesta, format="audio/mp3", autoplay=True)
+
+                st.session_state.messages.append({"role":"assistant", "content":respuesta, "audio":audio_respuesta})
 
             except Exception as e:
                 st.error(f"Error: {e}")

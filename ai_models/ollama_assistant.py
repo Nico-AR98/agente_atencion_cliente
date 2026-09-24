@@ -67,7 +67,7 @@ async def get_ollama_response(system_role, prompt,ollama_config=None, temperatur
         )
         return response["message"]["content"]
     except Exception as e:
-        return f"Error al obtener la respuesta de Ollama: {e}"
+        raise RuntimeError(f"Error al obtener la respuesta de Ollama: {e}") from e
 
 
 async def main():

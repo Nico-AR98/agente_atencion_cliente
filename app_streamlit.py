@@ -4,7 +4,8 @@ from dotenv import load_dotenv
 
 from ai_models.llm_router import crear_chat
 from negocio.utils import calcular_reintegro, recuperar_contrasena
-#from speech.voice_generation import generate_voice
+from speech.voice_generation_gtts import generate_voice
+from speech.sp_recognition import transcribe_audio
 
 load_dotenv()
 
@@ -62,6 +63,7 @@ st.title(f"👩 {ASSISTANT_NAME}")
 # --- Sidebar para opciones
 with st.sidebar:
     st.header("Acciones")
+    responder_con_voz = st.toggle("Responder con voz", value=True)
     if st.button("Limpiar chat"):
         st.session_state.messages = []
         st.session_state.chat_session = None
@@ -83,15 +85,35 @@ if "messages" not in st.session_state:
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
+        if message.get("audio"):
+            st.audio(message["audio"], format="audio/mp3")
 
 
 #Entrada del usuario:
+entrada = st.chat_input("Escribe tu consulta o graba un audio", accept_audio=True)
 
-if prompt := st.chat_input("Escribe tu consulta aqui"):
-    # 1: Mostrar mensaje del usuario
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
+prompt = None
+
+if entrada:
+
+    prompt = entrada.text
+
+    if entrada.audio:
+        with st.spinner("Transcribiendo audio ..."):
+            try:
+                prompt = transcribe_audio(entrada.audio.getvalue())
+            except Exception as e:
+                st.error(f"Error al transcribir el audio")
+                prompt = None
+
+        if entrada.audio and not prompt:
+            st.warning("No se pudo entender el audio, probá de nuevo")
+
+    if prompt:
+        # 1: Mostrar mensaje del usuario
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
 
 
     #2: Generamos la respuesta del asistente
@@ -100,8 +122,19 @@ if prompt := st.chat_input("Escribe tu consulta aqui"):
         with st.spinner("Procesando ..."):
             try:
                 respuesta = run_async(st.session_state.chat_session.enviar_mensaje(prompt))
+
+                if not respuesta:
+                    raise RuntimeError("El modelo no devolvio ninguna respuesta")
+
                 st.markdown(respuesta)
-                st.session_state.messages.append({"role":"assistant", "content":respuesta})
+
+                audio_respuesta = None
+
+                if responder_con_voz:
+                    audio_respuesta = generate_voice(respuesta)
+                    st.audio(audio_respuesta, format="audio/mp3", autoplay=True)
+
+                st.session_state.messages.append({"role": "assistant", "content":respuesta, "audio":audio_respuesta})
 
             except Exception as e:
                 st.error(f"Error: {e}")

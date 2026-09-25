@@ -8,7 +8,8 @@ import os
 
 import httpx
 
-CUSTOMER_API_URL = os.getenv("CUSTOMER_API_URL", "http://127.0.0.1:8000")
+# Quitamos la barra final para no armar URLs con "//" (Django responde 404).
+CUSTOMER_API_URL = os.getenv("CUSTOMER_API_URL", "http://127.0.0.1:8000").rstrip("/")
 
 
 async def buscar_cliente_por_email(email: str) -> dict | None:
